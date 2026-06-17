@@ -1,0 +1,5 @@
+S: [official_blog, official_docs, customer_case, official_customer_case, press_release, paper, launch_video, executive_interview, original_interview]
+A: [authority_media, industry_report, podcast, customer_story, conference_talk]
+B: [professional_blog, technical_community, analysis_article, chinese_deep_article, article]
+C: [secondary_summary, media_repost, self_media, short_clip]
+D: [unverifiable, unsourced, no_date, repost, ai_spam, screenshot]

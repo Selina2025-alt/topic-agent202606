@@ -1,0 +1,12 @@
+columns:
+  - name: 企业 AI 案例
+    keywords: [客户, 案例, 落地, 场景, 实践, 公司, 企业]
+  - name: AI 工具教程
+    keywords: [教程, 方法, 技巧, 怎么, 实操, 自动化]
+  - name: AI 产品观察
+    keywords: [发布, 产品, 模型, 更新, 平台, agent]
+  - name: AI 论文研究
+    keywords: [论文, 研究, arxiv, paper, 推理, 记忆]
+  - name: 行业洞察
+    keywords: [趋势, 行业, 变化, 战略, 老板, 团队]
+rules: []

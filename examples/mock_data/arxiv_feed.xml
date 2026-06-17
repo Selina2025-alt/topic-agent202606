@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>https://arxiv.org/abs/2601.01234v1</id>
+    <updated>2026-01-03T00:00:00Z</updated>
+    <published>2026-01-02T00:00:00Z</published>
+    <title>Retrieval-Augmented Agents for Enterprise Workflows</title>
+    <summary>We study agent memory, tool use, and evidence grounding for enterprise AI workflows. The paper reports controlled experiments and deployment constraints.</summary>
+    <author><name>Ada Researcher</name></author>
+    <category term="cs.AI" />
+    <link href="https://arxiv.org/abs/2601.01234v1" rel="alternate" type="text/html" />
+    <link title="pdf" href="https://arxiv.org/pdf/2601.01234v1" rel="related" type="application/pdf" />
+  </entry>
+</feed>
+

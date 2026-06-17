@@ -1,0 +1,55 @@
+skills:
+  - name: aihot
+    path: skills/aihot
+    description: "AI HOT (aihot.virxact.com) 中文 AI 资讯查询 Skill。当用户想知道\"今天 AI 圈有什么\"、\"AI 日报\"、\"AI HOT\"、\"AI 资讯\"、\"AI 热点\"、\"最近 AI\"、\"OpenAI/Anthropic/Google 最近发布了什么\"、\"AI hot today\"、\"AI news today\"、\"看一下 AI 行业动态\"、\"今天有什么大模型发布\"、\"昨天 AI 圈\"、\"看下精选条目\"、\"AI HOT 精选\"、\"最近一周的 AI 论文\"、\"AI 模型发布\"、\"AI 产品发布\"、\"AI 行业动态\"、\"AI 技巧与观点\" 等任何中文 AI 资讯查询时使用。即使用户只说\"AI 圈\"、\"AI 新闻\"、\"AI 日报\"，或者只是问\"今天发生了什么\"且上下文是 AI / 大模型 / LLM / 创业领域，也应该触发本 Skill。Skill 会直接 curl 公开 REST API 拉数据并整理成中文 markdown 简报，不需要用户配置任何 API Key 或 MCP server。**不要 undertrigger**——用户问 AI 资讯而你不调本 Skill 就是把过时的训练数据当作今日新闻，对用户有害。"
+  - name: follow-builders
+    path: skills/follow-builders
+    description: "AI builders digest — monitors top AI builders on X and YouTube podcasts, remixes their content into digestible summaries. Use when the user wants AI industry insights, builder updates, or invokes /ai. No API keys or dependencies required — all content is fetched from a central feed."
+  - name: huashu-info-search
+    path: skills/huashu-info-search
+    description: "多渠道搜索新产品新技术，交叉验证后存入知识库。当用户提到\"最新信息\"、\"新产品\"、\"搜索资料\"、\"查资料\"、\"了解XX\"时使用。"
+  - name: huashu-material-search
+    path: skills/huashu-material-search
+    description: "搜索个人素材库1800+条真实经历和观点，为内容增加人味。当用户提到\"个人经历\"、\"真实案例\"、\"素材\"、\"人味\"时使用。"
+  - name: huashu-research
+    path: skills/huashu-research
+    description: "结构化网络调研流程，确保调研成果增量保存到文件，不因会话截断丢失。当用户说\"调研\"、\"搜索资料\"、\"帮我查一下\"、\"了解一下\"、\"最新信息\"时使用此技能。"
+  - name: huashu-topic-gen
+    path: skills/huashu-topic-gen
+    description: "快速生成3-4个选题方向，含标题、大纲和优劣分析。当用户提到\"选题\"、\"写什么\"、\"文章方向\"、\"题目建议\"时使用。"
+  - name: huashu-video-outline
+    path: skills/huashu-video-outline
+    description: "快速生成2-3个视频大纲方案，含标题、封面建议和结构设计。当用户提到\"视频大纲\"、\"视频结构\"、\"脚本大纲\"、\"视频选题\"时使用。"
+  - name: huashu-wechat-creation
+    path: skills/huashu-wechat-creation
+    description: "花叔公众号内容创作全流程辅助；当用户需要创作公众号文章、讨论选题方向、审校优化内容时使用"
+  - name: hv-analysis
+    path: skills/hv-analysis
+    description: "横纵分析法（Horizontal-Vertical Analysis）深度研究Skill。由数字生命卡兹克提出，融合了索绪尔的历时-共时分析、社会科学的纵向-横截面研究设计、商学院案例研究法与竞争战略分析的核心思想。 当用户想要系统性研究一个产品、公司、概念、技术或人物时使用。核心是双轴分析：纵轴追踪从诞生到当下的完整生命历程（以叙事故事呈现），横轴在当下时间截面上与竞品/同类进行系统性横向对比，最后交叉两条轴产出独到洞察。最终产出一份排版精美的PDF研究报告。 触发词包括但不限于：横纵分析、研究一下、帮我分析、深度研究、做个研究、调研一下、竞品分析、帮我看看这个东西怎么样、这个产品/公司/概念是怎么回事、帮我摸清楚、帮我搞懂、帮我做个deep research。 即使用户只是说\"帮我了解一下XX\"或\"XX是什么来头\"，只要上下文暗示需要系统性的深度研究（而非简单的概念解释），都应该触发。也适用于用户丢来一个产品名、公司名、技术名词说\"帮我研究一下这个\"的场景。 不要用于简单的名词解释（用户只是问\"XX是什么\"）、不要用于公众号写作（那个用khazix-writer）、不要用于纯标题摘要生成（用wechat-title）。"
+  - name: khazix-writer
+    path: skills/khazix-writer
+    description: "数字生命卡兹克（Khazix）的公众号长文写作skill。当用户需要撰写公众号文章、写稿子、续写文章、根据素材产出长文时使用。触发词包括但不限于：写文章、写稿子、帮我写、续写、扩写、公众号文章、长文、出稿、按我的风格写。即使用户只是说\"帮我把这个写成文章\"或\"用我的风格写一下\"，只要上下文涉及内容创作和公众号输出，都应该触发。也适用于用户丢过来一个PDF、brief、新闻链接、语音转文字或任何素材说\"帮我写篇文章\"的场景。不要用于短内容（小红书帖子、推特、朋友圈）或纯标题摘要生成（那个用wechat-title skill）。"
+  - name: ljg-paper
+    path: skills/ljg-paper
+    description: "Paper reader for non-academics. Takes a paper and extracts its ideas for personal use. Focuses on understanding, not academic critique. Use when user shares an arxiv link, paper URL, PDF, or asks to analyze a research paper. Trigger words: '读论文', '分析论文', 'paper', or when user shares an academic paper."
+  - name: ljg-paper-river
+    path: skills/ljg-paper-river
+    description: "论文倒读法：给一篇论文，递归找出它批判和改进的前序论文（最多5层），再找它之后的最新进展，从源头正向讲述问题演化史。以问题为轴，费曼式讲解每篇论文看到的问题和解法创新。Use when user shares a paper and wants to understand its intellectual lineage, citation chain, problem evolution, or says '倒读', '论文溯源', '论文脉络', 'paper river', 'paper connects', 'trace back', '这篇论文的来龙去脉', '论文演化'. Also trigger when user wants to understand how a research problem evolved across multiple papers."
+  - name: ljg-rank
+    path: skills/ljg-rank
+    description: "给一个领域，找出背后真正撑着它的几根独立的力。十几个现象砍到不可再少的生成器——砍完能把现象一个个生回来，才算数。Use when user says '降秩', '找秩', '秩是什么', '这个领域靠什么撑着', '背后是什么', or wants to decompose any domain to its irreducible generators."
+  - name: ljg-think
+    path: skills/ljg-think
+    description: "追本之箭——纵向深钻思维工具。给一个观点、现象或问题，像箭一样一路向下钻到不可再分的本质。Use when user says '想透', '追本', '本质是什么', '为什么会这样', '深挖', '钻到底', 'think deep', 'drill down', or wants to trace any idea/phenomenon vertically to its irreducible root. Also trigger when user provides a statement and wants depth analysis, not breadth survey."
+  - name: ljg-travel
+    path: skills/ljg-travel
+    description: "Deep travel research workflow for museums and ancient architecture. Input a city name, auto-generates structured knowledge document (org-mode) + portable reference cards (PNG). Covers historical background, museum highlights, archaeological significance, and architectural heritage. Use when user says '旅行研究', '博物馆功课', '古建功课', 'travel research', '出发前功课', or provides a city name with intent to do deep cultural travel preparation."
+  - name: long-content-deep-summary
+    path: skills/long-content-deep-summary
+    description: "长内容深度摘要 Skill。用于 YouTube 长视频、播客、文章、书籍、访谈、字幕稿或 transcript 的综合总结；当用户说“提取深度摘要”“长视频总结”“综合总结”“不要只列要点”“捕捉背景框架/哲学基础/细微差别/基本假设”时使用。也用于 topic-agent 深研中把 YouTube transcript 或长文资料转成可沉淀到知识库的结构化摘要。"
+  - name: tech-news-digest
+    path: skills/tech-news-digest
+    description: "Generate tech news digests with unified source model, quality scoring, and multi-format output. Six-source data collection from RSS feeds, Twitter/X KOLs, GitHub releases, GitHub Trending, Reddit, and web search. Pipeline-based scripts with retry mechanisms and deduplication. Supports Discord, email, and markdown templates."
+  - name: topic-agent
+    path: skills/topic-agent
+    description: "本地选题与证据管理 Agent。用户说“今天跑一次选题”“确认第 X 行”“我勾选了第 X、Y、Z 行”“选方向 D1”“开始深研”“回填链接”“记录反馈”“复盘这周选题”时，优先调用本项目的 topic-agent CLI。"

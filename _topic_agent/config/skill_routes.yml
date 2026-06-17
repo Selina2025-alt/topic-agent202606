@@ -1,0 +1,19 @@
+routes:
+  intake:
+    primary: [aihot, follow-builders, tech-news-digest]
+    fallback: [huashu-info-search, huashu-research]
+    purpose: "每日信号、热点、Builder观点、技术新闻"
+  topic_generation:
+    primary: [huashu-topic-gen, huashu-wechat-creation]
+    support: [khazix-writer, ljg-rank, ljg-think]
+    purpose: "母选题生成、角度分化、选题质检"
+  deep_research:
+    primary: [hv-analysis, huashu-research, huashu-info-search]
+    support: [ljg-paper, ljg-paper-river, long-content-deep-summary, huashu-material-search]
+    purpose: "深研资料包、论文脉络、长内容摘要、个人素材补强"
+  content_shape:
+    primary: [khazix-writer, huashu-wechat-creation, huashu-video-outline]
+    purpose: "公众号/视频号/销售材料方向判断，不做自动成稿"
+  evidence_tools:
+    primary: [@mozilla/readability, jsdom, rss-parser, pdfjs-dist, youtubei.js, exceljs]
+    purpose: "缺失技能由 1k+ stars GitHub 项目补齐，作为 CLI 依赖使用"

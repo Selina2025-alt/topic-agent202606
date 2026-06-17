@@ -1,0 +1,27 @@
+[
+  {
+    "source_id": "S001",
+    "project_id": "TP-20260615-999",
+    "type": "youtube",
+    "title": "Mock Long Interview",
+    "url": "https://www.youtube.com/watch?v=mock-long-video",
+    "author_or_org": "Mock Builder Podcast",
+    "published_at": "2026-06-01",
+    "collected_at": "2026-06-15T09:15:00.000Z",
+    "source_tier": "A",
+    "credibility_score": 0.85,
+    "relevance_score": 0.86,
+    "transcript_path": "raw/youtube_transcripts/S001.md",
+    "extracted_text_path": null,
+    "notes": "长视频 transcript + 深度摘要候选",
+    "status": "accepted",
+    "metadata": {
+      "youtube_video_id": "mock-long-video",
+      "has_transcript": true,
+      "duration": "01:12:00",
+      "deep_summary_prompt_path": "raw/deep_summaries/S001_prompt.md",
+      "deep_summary_path": "raw/deep_summaries/S001.md",
+      "deep_summary_skill": "long-content-deep-summary"
+    }
+  }
+]

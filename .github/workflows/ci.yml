@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run smoke tests
+        run: npm test
+
+      - name: Build web triage UI
+        run: npm run web:build
+
+      - name: Run doctor
+        run: node bin/topic-agent.mjs doctor
+
+      - name: Run release check
+        run: node bin/topic-agent.mjs release check
+
+      - name: Generate acceptance report
+        run: node bin/topic-agent.mjs acceptance

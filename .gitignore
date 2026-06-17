@@ -1,0 +1,17 @@
+node_modules/
+.env
+npm-debug.log*
+
+_topic_agent/backups/
+_topic_agent/daily/
+_topic_agent/projects/
+_topic_agent/reviews/
+_topic_agent/state/
+_topic_agent/state/run_history.jsonl
+web/dist/
+%TEMP%/
+data/*.xlsx
+skills/follow-builders/state-feed.json
+
+*.tmp
+*.log

@@ -1,0 +1,12 @@
+prefer: []
+avoid: []
+
+- rule_id: RULE-FB-001
+  scope: source
+  pattern: "这个搜索结果还是太泛，后面优先找官方客户案例原文"
+  action: avoid
+  weight_delta: -0.3
+  reason: "对 source 中匹配“这个搜索结果还是太泛，后面优先找官方客户案例原文”的模式降低权重"
+  created_from_feedback_id: FB-001
+  created_at: 2026-06-15T18:30:05.446+08:00
+  enabled: true

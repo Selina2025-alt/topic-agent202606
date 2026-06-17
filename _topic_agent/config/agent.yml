@@ -1,0 +1,5 @@
+name: topic-agent
+version: 0.1.0
+created_at: 2026-06-15T18:27:58.026+08:00
+topic_library: data/topic_library.csv
+state_dir: _topic_agent/state

@@ -1,0 +1,8 @@
+interface:
+  display_name: "长内容深度摘要"
+  short_description: "长视频/文章/播客的综合深度摘要"
+  default_prompt: "Use $long-content-deep-summary to create a comprehensive summary of this transcript, preserving context, assumptions, nuance, and timestamps."
+
+policy:
+  allow_implicit_invocation: true
+
