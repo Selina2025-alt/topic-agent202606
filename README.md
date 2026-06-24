@@ -43,6 +43,7 @@ node bin/topic-agent.mjs intake manual --title "一个手动输入的选题" --u
 node bin/topic-agent.mjs intake file --file .\source.md --title "本地素材里的选题"
 node bin/topic-agent.mjs intake hotlist --input .\hotlist.txt --limit 20
 node bin/topic-agent.mjs library validate
+node bin/topic-agent.mjs library repair
 node bin/topic-agent.mjs library format
 node bin/topic-agent.mjs library sync-xlsx
 node bin/topic-agent.mjs skills audit
@@ -77,7 +78,7 @@ node bin/topic-agent.mjs review weekly
 
 ## 目录说明
 
-- `data/topic_library.csv`：底层选题库，只写 PRD 指定前 10 个字段；创建时间统一为 `YYYY-MM-DD`。
+- `data/topic_library.csv`：底层选题库，保留原 10 个业务字段并追加 `分数`；创建时间统一为 `YYYY-MM-DD`。
 - `data/topic_library.xlsx`：导出/备份辅助选题库，列宽更宽、自动换行、冻结表头；主交互请使用 Web Triage 工作台。
 - `web/`：本地 Triage 工作台前端源码，构建后由 `topic-agent web` 服务。
 - `_topic_agent/config/`：配置、来源分级、可解释规则。
@@ -105,7 +106,8 @@ node bin/topic-agent.mjs review weekly
 - 可以用 `intake rss --url ...` 从 RSS/Atom 生成候选选题，默认预览，加 `--write` 才写入 CSV。
 - 可以用 `intake manual --title ... --url ... --summary ... --write` 把对话里临时想到的主题或链接转成候选选题；不加 `--write` 只预览，但仍会把原始手动信号记入 `raw_signals.jsonl`。
 - 可以用 `intake file --file ...` 把本地 Markdown/txt 素材转成候选选题，用 `intake hotlist --input ...` 批量导入手动整理的热点列表；二者同样默认预览，显式加 `--write` 才入库。
-- 可以用 `library format` 把 CSV 的创建时间归一为 `YYYY-MM-DD`，并生成带列宽、自动换行和勾选列的 `data/topic_library.xlsx`；这是导出辅助，不再是主确认流程。
+- 可以用 `library repair` 清洗 CSV 字段语义，把 skill 路径移入 `来源`、把真实链接保留在 `关联热点链接/帖子`，并从最新候选回填 `分数`。
+- 可以用 `library format` 把 CSV 的创建时间归一为 `YYYY-MM-DD`，清洗字段语义，并生成带列宽、自动换行、分数列和勾选列的 `data/topic_library.xlsx`；这是导出辅助，不再是主确认流程。
 - 在 Web Triage 中采纳候选后，系统会把候选写入或匹配到 `topic_library.csv`，将 `是否选题` 标记为 `TRUE`，再由“创建批次”动作统一生成 SelectionBatch。
 - YouTube 链接会尝试通过 `youtubei.js` 抽取视频元数据和 transcript；失败时生成字幕占位文件，便于人工补字幕。
 - 长 YouTube 或长文资料可以用 `research summary-prompt --project ... --source S001` 生成 `$long-content-deep-summary` 提示文件，再用 `research attach-summary --project ... --source S001` 把最终摘要登记到 `sources.json` 和质检报告。

@@ -24,7 +24,8 @@ const TOPIC_FIELDS = [
   "选题方向/核心观点",
   "关联热点链接/帖子",
   "创建时间",
-  "是否选题"
+  "是否选题",
+  "分数"
 ];
 
 const BLUEPRINTS = [
@@ -222,6 +223,7 @@ async function dispatch(p, command, subcommand, opts) {
   if (command === "intake" && subcommand === "hotlist") return intakeHotlist(p, opts);
   if (command === "library" && subcommand === "validate") return validateLibrary(p);
   if (command === "library" && subcommand === "append") return appendCandidates(p, readJsonFile(path.resolve(opts.input)));
+  if (command === "library" && subcommand === "repair") return repairLibrary(p);
   if (command === "library" && subcommand === "format") return formatLibrary(p, opts);
   if (command === "library" && subcommand === "export-xlsx") return exportLibraryXlsx(p, opts);
   if (command === "library" && subcommand === "sync-xlsx") return syncLibraryFromXlsx(p, opts);
@@ -275,6 +277,7 @@ Commands:
   run daily [--dry-run] [--count 50]
   library validate
   library append --input candidates.json
+  library repair
   library format
   library export-xlsx [--output data\\topic_library.xlsx]
   library sync-xlsx [--input data\\topic_library.xlsx]
@@ -731,7 +734,7 @@ function generateCandidates(signals, count = DEFAULT_DAILY_CANDIDATE_COUNT, p = 
       source_names: sourceSignals.map((s) => s.source_id),
       content_type: bp.contentType,
       core_viewpoint: bp.viewpoint,
-      initial_links: sourceSignals.map((s) => s.url).filter(Boolean),
+      initial_links: candidateLinksFromSignals(sourceSignals),
       dedupe_key: normalizeTitle(bp.title),
       created_at: isoNow()
     });
@@ -828,7 +831,7 @@ function generateRouteCandidates(signals) {
       source_names: sourceSignals.map((signal) => signal.source_id),
       content_type: "利他（教程）",
       core_viewpoint: viewpoint,
-      initial_links: sourceSignals.map((signal) => signal.url).filter(Boolean),
+      initial_links: candidateLinksFromSignals(sourceSignals),
       dedupe_key: normalizeTitle(title),
       created_at: isoNow()
     };
@@ -885,7 +888,7 @@ function candidateFromSignalAngle(signal, angle) {
     source_names: [sourceName],
     content_type: contentType,
     core_viewpoint: renderTopicTemplate(viewpointTemplate, signal),
-    initial_links: signal.url ? [signal.url] : [],
+    initial_links: candidateLinksFromSignals([signal]),
     dedupe_key: normalizeTopicIdentity(sourceTopic),
     created_at: isoNow()
   };
@@ -906,7 +909,7 @@ function generateSkillMatrixCandidates(signals) {
         source_names: [skill.source_id, anchor],
         content_type: "利他（教程）",
         core_viewpoint: "把已有 skill 变成选题流水线中的一个明确动作，再接入实时热点、Builder 观点或深研证据。",
-        initial_links: skill.url ? [skill.url] : [],
+        initial_links: candidateLinksFromSignals([skill]),
         dedupe_key: normalizeTitle(title),
         created_at: isoNow()
       });
@@ -934,6 +937,10 @@ function inferSignalFocus(signal) {
 
 function compactSignalTitle(text) {
   return compactText(String(text || "").replace(/\s*https?:\/\/\S+/g, ""), 64);
+}
+
+function candidateLinksFromSignals(signals) {
+  return uniqueList((signals || []).map((signal) => signal?.url).filter(isExternalTopicLink));
 }
 
 function sourceTopicTitle(signal) {
@@ -989,6 +996,157 @@ function displayPath(p, file) {
   if (resolved.startsWith(root)) return relative(p.root, resolved);
   if (resolved.startsWith(distribution)) return relative(DISTRIBUTION_ROOT, resolved);
   return resolved;
+}
+
+function normalizeCandidateForLibraryRow(p, candidate, rowNumber) {
+  const column = matchColumn(p, candidate);
+  const normalized = normalizeCandidateSourceAndLinks(candidate);
+  return {
+    "序号": String(rowNumber),
+    "母选题ID": "",
+    "母选题": candidate.title,
+    "来源": normalized.source || "manual",
+    "内容类型": candidate.content_type || "行业洞察",
+    "栏目系列": column.column,
+    "选题方向/核心观点": candidate.core_viewpoint || "",
+    "关联热点链接/帖子": normalized.links,
+    "创建时间": dateOnly(candidate.created_at || isoNow()),
+    "是否选题": "",
+    "分数": formatScore(candidate.total_score)
+  };
+}
+
+function normalizeCandidateSourceAndLinks(candidate) {
+  const sources = [];
+  const links = [];
+  for (const source of candidate.source_names || []) addSourceName(sources, source);
+  for (const item of candidate.initial_links || []) {
+    for (const line of String(item || "").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (isSkillPath(trimmed)) addSourceName(sources, skillNameFromPath(trimmed));
+      else if (isExternalTopicLink(trimmed)) links.push(trimmed);
+    }
+  }
+  return {
+    source: uniqueList(sources).join(" / "),
+    links: uniqueList(links).join("\n")
+  };
+}
+
+function repairLibrarySourceAndLinks(source, links) {
+  const sources = [];
+  for (const item of splitLibraryList(source)) addSourceName(sources, item);
+  const keptLines = [];
+  let movedSkillSources = 0;
+  for (const line of String(links || "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (isSkillPath(trimmed)) {
+      addSourceName(sources, skillNameFromPath(trimmed));
+      movedSkillSources += 1;
+      continue;
+    }
+    keptLines.push(trimmed);
+  }
+  return {
+    source: uniqueList(sources).join(" / "),
+    links: normalizeLinkBlock(keptLines),
+    moved_skill_sources: movedSkillSources
+  };
+}
+
+function normalizeLinkBlock(lines) {
+  const output = [];
+  let previousBlank = true;
+  for (const line of lines) {
+    const text = String(line || "").trim();
+    if (!text) {
+      if (!previousBlank) output.push("");
+      previousBlank = true;
+      continue;
+    }
+    output.push(text);
+    previousBlank = false;
+  }
+  while (output.length && !output[output.length - 1]) output.pop();
+  return output.join("\n");
+}
+
+function addSourceName(sources, value) {
+  const text = String(value || "").trim();
+  if (!text) return;
+  if (isSkillPath(text)) {
+    sources.push(skillNameFromPath(text));
+    return;
+  }
+  if (isExternalTopicLink(text)) {
+    sources.push(text);
+    return;
+  }
+  for (const part of text.split(/\s*\/\s*|\r?\n/)) {
+    const clean = part.trim();
+    if (clean) sources.push(clean);
+  }
+}
+
+function isSkillPath(value) {
+  const text = String(value || "").replace(/\\/g, "/").trim();
+  return /(?:^|\/)skills\/[^/]+\/SKILL\.md$/i.test(text);
+}
+
+function skillNameFromPath(value) {
+  const text = String(value || "").replace(/\\/g, "/").trim();
+  const match = text.match(/(?:^|\/)skills\/([^/]+)\/SKILL\.md$/i);
+  return match ? match[1] : text;
+}
+
+function isExternalTopicLink(value) {
+  return /https?:\/\//i.test(String(value || ""));
+}
+
+function uniqueList(values) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(text);
+  }
+  return result;
+}
+
+function formatScore(value) {
+  if (value === undefined || value === null || value === "") return "";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value).trim();
+  return numeric.toFixed(1);
+}
+
+function loadLatestCandidateScoreIndex(p) {
+  const index = new Map();
+  const latest = latestFile(p.dailyDir, /^topic_candidates_.+\.json$/);
+  index.path = latest || "";
+  if (!latest) return index;
+  const data = readJson(latest, { candidates: [] });
+  for (const candidate of data.candidates || []) {
+    const score = formatScore(candidate.total_score);
+    if (!score) continue;
+    addScoreKey(index, candidate.id, score);
+    addScoreKey(index, candidate.title, score);
+    addScoreKey(index, candidate.dedupe_key, score);
+  }
+  return index;
+}
+
+function addScoreKey(index, key, score) {
+  const text = String(key || "").trim();
+  if (!text) return;
+  index.set(text, score);
+  index.set(normalizeTitle(text), score);
+  index.set(normalizeTopicIdentity(text), score);
 }
 
 function scoreCandidate(candidate, rules = []) {
@@ -1501,16 +1659,17 @@ function renderDailyDelivery(p, candidates, writeResult, dryRun) {
 function readLibrary(p) {
   if (!fs.existsSync(p.libraryCsv)) writeCsv(p.libraryCsv, [], TOPIC_FIELDS);
   const text = readText(p.libraryCsv);
-  if (!text.trim()) return { rows: [], fields: [...TOPIC_FIELDS] };
+  if (!text.trim()) return { rows: [], fields: [...TOPIC_FIELDS], original_fields: [] };
   const parsed = parseCsv(text);
-  const fields = normalizeFields(parsed.fields);
+  const originalFields = parsed.fields.map(normalizeFieldName);
+  const fields = normalizeFields(originalFields);
   const rows = parsed.rows.map((row) => {
     const clean = {};
     for (const field of fields) clean[field] = (row[field] || "").trim();
     for (const field of TOPIC_FIELDS) if (!(field in clean)) clean[field] = "";
     return clean;
   });
-  return { rows, fields };
+  return { rows, fields, original_fields: originalFields };
 }
 
 function writeLibrary(p, rows, fields, backup = true) {
@@ -1531,31 +1690,88 @@ function validateLibrary(p) {
 }
 
 async function formatLibrary(p, opts = {}) {
-  const normalized = normalizeLibraryCsv(p);
+  const normalized = repairLibrary(p);
   const xlsx = await exportLibraryXlsx(p, opts);
   return {
     library_path: p.libraryCsv,
     xlsx_path: xlsx.xlsx_path,
     rows: normalized.rows.length,
     normalized_dates: normalized.normalized_dates,
-    normalized_selection_values: normalized.normalized_selection_values
+    normalized_selection_values: normalized.normalized_selection_values,
+    moved_skill_sources: normalized.moved_skill_sources,
+    score_backfilled: normalized.score_backfilled
   };
 }
 
 function normalizeLibraryCsv(p) {
-  const { rows, fields } = readLibrary(p);
+  return repairLibrary(p);
+}
+
+function repairLibrary(p) {
+  const { rows, fields, original_fields: originalFields = [] } = readLibrary(p);
+  const scoreIndex = loadLatestCandidateScoreIndex(p);
+  const fieldsChanged = originalFields.join("\u0001") !== fields.join("\u0001");
   let normalizedDates = 0;
   let normalizedSelectionValues = 0;
+  let movedSkillSources = 0;
+  let cleanedLinkRows = 0;
+  let scoreBackfilled = 0;
+  let scoreNormalized = 0;
   for (const row of rows) {
+    const beforeSource = row["来源"];
+    const beforeLinks = row["关联热点链接/帖子"];
+    const cleaned = repairLibrarySourceAndLinks(beforeSource, beforeLinks);
+    row["来源"] = cleaned.source;
+    row["关联热点链接/帖子"] = cleaned.links;
+    movedSkillSources += cleaned.moved_skill_sources;
+    if (row["关联热点链接/帖子"] !== beforeLinks) cleanedLinkRows += 1;
+
     const beforeDate = row["创建时间"];
     row["创建时间"] = dateOnly(row["创建时间"] || isoNow());
     if (row["创建时间"] !== beforeDate) normalizedDates += 1;
+
     const beforeSelection = row["是否选题"];
     row["是否选题"] = isCheckedValue(row["是否选题"]) ? "TRUE" : "";
     if (row["是否选题"] !== beforeSelection) normalizedSelectionValues += 1;
+
+    const beforeScore = row["分数"];
+    if (!beforeScore) {
+      const score = scoreForLibraryRow(scoreIndex, row);
+      if (score) {
+        row["分数"] = score;
+        scoreBackfilled += 1;
+      }
+    } else {
+      row["分数"] = formatScore(beforeScore);
+      if (row["分数"] !== beforeScore) scoreNormalized += 1;
+    }
   }
-  if (normalizedDates || normalizedSelectionValues) writeLibrary(p, rows, fields);
-  return { rows, fields, normalized_dates: normalizedDates, normalized_selection_values: normalizedSelectionValues };
+  const changed = fieldsChanged || normalizedDates || normalizedSelectionValues || movedSkillSources || cleanedLinkRows || scoreBackfilled || scoreNormalized;
+  if (changed) writeLibrary(p, rows, fields);
+  return {
+    library_path: p.libraryCsv,
+    rows,
+    fields,
+    normalized_dates: normalizedDates,
+    normalized_selection_values: normalizedSelectionValues,
+    moved_skill_sources: movedSkillSources,
+    cleaned_link_rows: cleanedLinkRows,
+    score_backfilled: scoreBackfilled,
+    score_normalized: scoreNormalized,
+    fields_updated: fieldsChanged,
+    latest_candidates_path: scoreIndex.path || null,
+    changed
+  };
+}
+
+function scoreForLibraryRow(scoreIndex, row) {
+  for (const value of [row["母选题"], row["母选题ID"]]) {
+    const text = String(value || "").trim();
+    if (!text) continue;
+    const score = scoreIndex.get(text) || scoreIndex.get(normalizeTitle(text)) || scoreIndex.get(normalizeTopicIdentity(text));
+    if (score) return score;
+  }
+  return "";
 }
 
 async function exportLibraryXlsx(p, opts = {}) {
@@ -1586,6 +1802,7 @@ async function exportLibraryXlsx(p, opts = {}) {
     for (const field of normalizedFields) {
       if (field === "创建时间") displayRow[field] = dateOnly(row[field] || "");
       else if (field === "是否选题") displayRow[field] = isCheckedValue(row[field]) ? "☑" : "☐";
+      else if (field === "分数") displayRow[field] = row[field] ? Number(formatScore(row[field])) : "";
       else displayRow[field] = row[field] || "";
     }
     sheet.addRow(displayRow);
@@ -1616,6 +1833,9 @@ async function exportLibraryXlsx(p, opts = {}) {
           errorTitle: "请选择",
           error: "是否选题只能选择 ☐ 或 ☑。"
         };
+      }
+      if (field === "分数") {
+        cell.numFmt = "0.0";
       }
     });
   }
@@ -1685,7 +1905,8 @@ function topicLibraryColumnWidth(field) {
     "选题方向/核心观点": 52,
     "关联热点链接/帖子": 86,
     "创建时间": 14,
-    "是否选题": 12
+    "是否选题": 12,
+    "分数": 10
   }[field] || 20;
 }
 
@@ -1878,6 +2099,8 @@ function libraryRowToCandidate(row, topicEntries = []) {
   const indexed = topicEntries.find((entry) => Number(entry.row_number || entry.csv_row_number) === rowNumber);
   const sourceNames = splitLibraryList(row["来源"]);
   const links = splitLibraryLinks(row["关联热点链接/帖子"]);
+  const scoreText = String(row["分数"] || "").trim();
+  const totalScore = scoreText ? Number(scoreText) : NaN;
   return {
     id: indexed?.candidate_id || `LIB-${rowNumber || shortHash(title)}`,
     title,
@@ -1889,6 +2112,7 @@ function libraryRowToCandidate(row, topicEntries = []) {
     dedupe_key: normalizeTitle(title),
     created_at: row["创建时间"] || null,
     scores: {},
+    total_score: Number.isFinite(totalScore) ? totalScore : undefined,
     row_number: rowNumber,
     library_selected: isCheckedValue(row["是否选题"]),
     library_topic_id: row["母选题ID"] || "",
@@ -1898,7 +2122,10 @@ function libraryRowToCandidate(row, topicEntries = []) {
 }
 
 function splitLibraryList(value) {
-  return String(value || "")
+  const text = String(value || "").trim();
+  if (isSkillPath(text)) return [skillNameFromPath(text)];
+  if (isExternalTopicLink(text)) return [text];
+  return text
     .split(/\s*\/\s*|\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -1908,7 +2135,7 @@ function splitLibraryLinks(value) {
   return String(value || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter((line) => line && !isSkillPath(line));
 }
 
 function candidateRecommendedReason(candidate) {
@@ -2667,19 +2894,7 @@ function appendCandidates(p, candidates) {
       continue;
     }
     maxSeq += 1;
-    const column = matchColumn(p, candidate);
-    const row = {
-      "序号": String(maxSeq),
-      "母选题ID": "",
-      "母选题": candidate.title,
-      "来源": (candidate.source_names || ["manual"]).join(" / "),
-      "内容类型": candidate.content_type || "行业洞察",
-      "栏目系列": column.column,
-      "选题方向/核心观点": candidate.core_viewpoint || "",
-      "关联热点链接/帖子": (candidate.initial_links || []).join("\n"),
-      "创建时间": dateOnly(candidate.created_at || isoNow()),
-      "是否选题": ""
-    };
+    const row = normalizeCandidateForLibraryRow(p, candidate, maxSeq);
     const internalTopicKey = internalTopicKeyForRow(row);
     rows.push(row);
     appended.push(row);
@@ -4875,7 +5090,7 @@ function parseCsv(text) {
     row.push(value);
     rows.push(row);
   }
-  const fields = rows.shift() || [];
+  const fields = (rows.shift() || []).map(normalizeFieldName);
   return { fields, rows: rows.filter((r) => r.some((cell) => cell !== "")).map((r) => Object.fromEntries(fields.map((field, index) => [field, r[index] || ""]))) };
 }
 
@@ -4895,8 +5110,13 @@ function writeCsv(file, rows, fields) {
 }
 
 function normalizeFields(fields) {
-  const extras = fields.filter((field) => field && !TOPIC_FIELDS.includes(field) && !field.startsWith("Unnamed:"));
-  return [...TOPIC_FIELDS, ...extras];
+  const normalized = (fields || []).map(normalizeFieldName).filter(Boolean);
+  const extras = normalized.filter((field) => !TOPIC_FIELDS.includes(field) && !field.startsWith("Unnamed:"));
+  return uniqueList([...TOPIC_FIELDS, ...extras]);
+}
+
+function normalizeFieldName(field) {
+  return String(field || "").replace(/^\uFEFF/, "").trim();
 }
 
 function mergeLinkBlocks(current, addition) {

@@ -119,6 +119,7 @@ fs.writeFileSync(
 
 const init = run(["init"]);
 assert.ok(fs.existsSync(init.library));
+assert.ok(fs.readFileSync(init.library, "utf8").split(/\r?\n/)[0].includes("分数"));
 assert.ok(fs.existsSync(path.join(root, "_topic_agent", "config", "skill_routes.yml")));
 assert.ok(fs.existsSync(path.join(root, "_topic_agent", "config", "external_tools.yml")));
 assert.ok(fs.existsSync(path.join(root, "_topic_agent", "state", "topic_index.json")));
@@ -145,11 +146,39 @@ const gbkAppend = runAt(gbkRoot, ["library", "append", "--input", gbkCandidatePa
 assert.equal(gbkAppend.appended_count, 1);
 assert.ok(fs.readFileSync(path.join(gbkRoot, "data", "topic_library.csv"), "utf8").includes("GBK 追加选题"));
 
+const repairRoot = fs.mkdtempSync(path.join(os.tmpdir(), "topic-agent-repair-"));
+runAt(repairRoot, ["init"]);
+const repairTitle = "历史 CSV 清洗测试选题";
+fs.writeFileSync(
+  path.join(repairRoot, "data", "topic_library.csv"),
+  "\uFEFF序号,母选题ID,母选题,来源,内容类型,栏目系列,选题方向/核心观点,关联热点链接/帖子,创建时间,是否选题\r\n"
+    + `1,,${repairTitle},huashu-info-search,行业洞察,行业洞察,旧行核心观点,"skills/huashu-info-search/SKILL.md\nskills/hv-analysis/SKILL.md\n\n[深研来源]\nS001 搜索：https://example.com/source",2026-06-01,TRUE\r\n`,
+  "utf8"
+);
+fs.mkdirSync(path.join(repairRoot, "_topic_agent", "daily"), { recursive: true });
+fs.writeFileSync(
+  path.join(repairRoot, "_topic_agent", "daily", "topic_candidates_2026-06-24.json"),
+  JSON.stringify({ candidates: [{ id: "TC-REPAIR", title: repairTitle, total_score: 31.2, dedupe_key: repairTitle }] }),
+  "utf8"
+);
+const repairResult = runAt(repairRoot, ["library", "repair"]);
+assert.equal(repairResult.fields_updated, true);
+assert.equal(repairResult.moved_skill_sources, 2);
+assert.equal(repairResult.score_backfilled, 1);
+const repairedCsv = fs.readFileSync(path.join(repairRoot, "data", "topic_library.csv"), "utf8");
+assert.ok(repairedCsv.split(/\r?\n/)[0].includes("分数"));
+assert.ok(repairedCsv.includes("huashu-info-search / hv-analysis"));
+assert.ok(repairedCsv.includes("https://example.com/source"));
+assert.ok(repairedCsv.includes("31.2"));
+assert.ok(!repairedCsv.includes("skills/"));
+assert.ok(fs.readdirSync(path.join(repairRoot, "_topic_agent", "backups")).some((name) => name.endsWith(".csv")));
+
 const xlsxRoot = fs.mkdtempSync(path.join(os.tmpdir(), "topic-agent-xlsx-"));
 runAt(xlsxRoot, ["init"]);
 runAt(xlsxRoot, ["run", "daily", "--count", "2"]);
 const formattedLibrary = runAt(xlsxRoot, ["library", "format"]);
 assert.ok(fs.existsSync(formattedLibrary.xlsx_path));
+assert.ok("score_backfilled" in formattedLibrary);
 const xlsxBook = new ExcelJS.Workbook();
 await xlsxBook.xlsx.readFile(formattedLibrary.xlsx_path);
 const xlsxSheet = xlsxBook.getWorksheet("选题库");
@@ -157,6 +186,9 @@ assert.ok(xlsxSheet);
 assert.ok(xlsxSheet.getColumn("C").width >= 30);
 assert.equal(xlsxSheet.getCell("J2").value, "☐");
 assert.equal(xlsxSheet.getCell("J2").dataValidation.type, "list");
+assert.equal(xlsxSheet.getCell("K1").value, "分数");
+assert.equal(xlsxSheet.getCell("K2").numFmt, "0.0");
+assert.equal(typeof xlsxSheet.getCell("K2").value, "number");
 assert.equal(xlsxSheet.getCell("C2").alignment.wrapText, true);
 assert.match(String(xlsxSheet.getCell("I2").value), /^\d{4}-\d{2}-\d{2}$/);
 xlsxSheet.getCell("J2").value = "☑";
@@ -169,6 +201,8 @@ assert.equal(selectedBatch.items[0].row_number, 1);
 const xlsxCsvRows = fs.readFileSync(path.join(xlsxRoot, "data", "topic_library.csv"), "utf8");
 assert.ok(xlsxCsvRows.includes("TRUE"));
 assert.ok(!/\d{4}-\d{2}-\d{2}T/.test(xlsxCsvRows));
+assert.ok(xlsxCsvRows.split(/\r?\n/)[0].includes("分数"));
+assert.ok(!xlsxCsvRows.includes("skills/"));
 
 const triageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "topic-agent-triage-"));
 runAt(triageRoot, ["init"]);
@@ -188,7 +222,8 @@ try {
   assert.equal(triageInitial.response.status, 200);
   assert.equal(triageInitial.data.scope, "all");
   assert.ok(triageInitial.data.candidates.length >= 3);
-  assert.ok(triageInitial.data.candidates.some((candidate) => candidate.title === libraryOnlyTitle));
+  const libraryOnlyCandidate = triageInitial.data.candidates.find((candidate) => candidate.title === libraryOnlyTitle);
+  assert.ok(libraryOnlyCandidate);
   const triageDateOnly = await fetchJson(`${baseUrl}/api/triage?scope=date`);
   assert.equal(triageDateOnly.response.status, 200);
   assert.equal(triageDateOnly.data.scope, "date");
@@ -311,6 +346,7 @@ assert.ok(dailyCandidates.candidates.length >= 50);
 assert.ok(dailyCandidates.candidates[0].source_ids.length > 0);
 assert.equal(new Set(dailyCandidates.candidates.map((candidate) => candidate.dedupe_key)).size, dailyCandidates.candidates.length);
 assert.ok(!dailyCandidates.candidates.some((candidate) => candidate.title.includes("如果把") && candidate.title.includes("写给老板")));
+assert.ok(!dailyCandidates.candidates.some((candidate) => (candidate.initial_links || []).some((link) => String(link).includes("skills/"))));
 const dailyStatuses = new Set(dailyCandidateState.events.map((event) => event.status));
 for (const expectedStatus of ["raw_signal_collected", "candidate_generated", "candidate_scored", "candidate_deduped", "candidate_ready_for_library"]) {
   assert.ok(dailyStatuses.has(expectedStatus), `daily candidate state should include ${expectedStatus}`);
