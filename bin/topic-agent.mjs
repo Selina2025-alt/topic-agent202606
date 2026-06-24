@@ -12,6 +12,8 @@ import ExcelJS from "exceljs";
 const DISTRIBUTION_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_DAILY_CANDIDATE_COUNT = 50;
 const DAILY_SIGNAL_LIMIT = 160;
+const RECENT_TOPIC_LINK_TARGET = 4;
+const RECENT_TOPIC_LINK_LOOKBACK_DAYS = 45;
 const AIHOT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const TOPIC_FIELDS = [
@@ -719,6 +721,7 @@ function generateCandidates(signals, count = DEFAULT_DAILY_CANDIDATE_COUNT, p = 
     if (seen.has(key)) return;
     seen.add(key);
     candidate.dedupe_key = key;
+    candidate.initial_links = ensureCandidateRecentLinks(candidate);
     candidate.scores = scoreCandidate(candidate, strategyRules);
     candidate.total_score = Number(Object.values(candidate.scores).reduce((a, b) => a + b, 0).toFixed(2));
     candidates.push(candidate);
@@ -940,7 +943,69 @@ function compactSignalTitle(text) {
 }
 
 function candidateLinksFromSignals(signals) {
-  return uniqueList((signals || []).map((signal) => signal?.url).filter(isExternalTopicLink));
+  return uniqueList((signals || []).map((signal) => extractExternalTopicUrl(signal?.url)).filter(Boolean));
+}
+
+function ensureCandidateRecentLinks(candidate) {
+  const existing = uniqueList((candidate.initial_links || []).flatMap((item) => splitLinkItems(item)).map(extractExternalTopicUrl).filter(Boolean));
+  const recent = recentDiscoveryLinksForCandidate(candidate);
+  return uniqueList([...existing, ...recent]).slice(0, Math.max(RECENT_TOPIC_LINK_TARGET, existing.length));
+}
+
+function splitLinkItems(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function recentDiscoveryLinksForCandidate(candidate) {
+  const query = recentSearchQueryForCandidate(candidate);
+  if (!query) return [];
+  const after = recentAfterDate(RECENT_TOPIC_LINK_LOOKBACK_DAYS);
+  const encodedRecentSearch = encodeURIComponent(`${query} after:${after}`);
+  const encodedPlain = encodeURIComponent(query);
+  const links = [
+    `https://www.google.com/search?q=${encodedRecentSearch}&tbs=qdr:m`,
+    `https://news.google.com/search?q=${encodedPlain}%20when%3A45d&hl=zh-CN&gl=CN&ceid=CN%3Azh-Hans`,
+    `https://www.youtube.com/results?search_query=${encodedPlain}`,
+    `https://hn.algolia.com/?dateRange=pastMonth&page=0&prefix=false&query=${encodedPlain}&sort=byDate&type=story`
+  ];
+  if (isPaperLikeCandidate(candidate)) {
+    links.push(`https://arxiv.org/search/?query=${encodedPlain}&searchtype=all&abstracts=show&order=-announced_date_first&size=50`);
+  }
+  return uniqueList(links);
+}
+
+function recentSearchQueryForCandidate(candidate) {
+  const title = compactSearchText(candidate.title || candidate.source_topic || "", 80);
+  const viewpoint = compactSearchText(candidate.core_viewpoint || "", 80);
+  const sources = (candidate.source_names || []).filter((name) => name && !isInternalSourceOnly(name)).slice(0, 2).join(" ");
+  const topic = title || viewpoint;
+  if (!topic) return "";
+  return uniqueList([topic, sources, "AI"]).join(" ").trim();
+}
+
+function compactSearchText(value, maxLength = 80) {
+  return normalizeWhitespace(String(value || "")
+    .replace(/\s*https?:\/\/\S+/g, "")
+    .replace(/["'`<>]/g, " ")
+    .replace(/[|]/g, " "))
+    .slice(0, maxLength)
+    .trim();
+}
+
+function isInternalSourceOnly(value) {
+  return ["manual", "topic_library", "unknown"].includes(String(value || "").trim().toLowerCase());
+}
+
+function recentAfterDate(days) {
+  return dateOnly(new Date(Date.now() - Math.max(1, days) * 24 * 60 * 60 * 1000).toISOString());
+}
+
+function isPaperLikeCandidate(candidate) {
+  const text = [candidate.title, candidate.content_type, candidate.core_viewpoint, ...(candidate.source_names || [])].join(" ").toLowerCase();
+  return /paper|arxiv|论文|璁烘枃|research/.test(text);
 }
 
 function sourceTopicTitle(signal) {
@@ -1025,9 +1090,10 @@ function normalizeCandidateSourceAndLinks(candidate) {
       const trimmed = line.trim();
       if (!trimmed) continue;
       if (isSkillPath(trimmed)) addSourceName(sources, skillNameFromPath(trimmed));
-      else if (isExternalTopicLink(trimmed)) links.push(trimmed);
+      else if (isExternalTopicLink(trimmed)) links.push(extractExternalTopicUrl(trimmed));
     }
   }
+  links.push(...recentDiscoveryLinksForCandidate({ ...candidate, source_names: sources.length ? sources : candidate.source_names || [] }));
   return {
     source: uniqueList(sources).join(" / "),
     links: uniqueList(links).join("\n")
@@ -1046,13 +1112,30 @@ function repairLibrarySourceAndLinks(source, links) {
       movedSkillSources += 1;
       continue;
     }
-    keptLines.push(trimmed);
+    const url = extractExternalTopicUrl(trimmed);
+    if (url) keptLines.push(url);
   }
   return {
     source: uniqueList(sources).join(" / "),
     links: normalizeLinkBlock(keptLines),
     moved_skill_sources: movedSkillSources
   };
+}
+
+function ensureLibraryRowRecentLinks(row) {
+  const existingLines = splitLinkItems(row["关联热点链接/帖子"]);
+  const externalCount = existingLines.filter(isExternalTopicLink).length;
+  if (externalCount >= RECENT_TOPIC_LINK_TARGET) return normalizeLinkBlock(existingLines);
+  const needed = Math.max(0, RECENT_TOPIC_LINK_TARGET - externalCount);
+  const candidate = {
+    title: row["母选题"],
+    source_names: splitLibraryList(row["来源"]),
+    content_type: row["内容类型"],
+    core_viewpoint: row["选题方向/核心观点"],
+    initial_links: existingLines
+  };
+  const recent = recentDiscoveryLinksForCandidate(candidate);
+  return normalizeLinkBlock(uniqueList([...existingLines, ...recent]).slice(0, existingLines.length + needed));
 }
 
 function normalizeLinkBlock(lines) {
@@ -1101,7 +1184,12 @@ function skillNameFromPath(value) {
 }
 
 function isExternalTopicLink(value) {
-  return /https?:\/\//i.test(String(value || ""));
+  return Boolean(extractExternalTopicUrl(value));
+}
+
+function extractExternalTopicUrl(value) {
+  const match = String(value || "").match(/https?:\/\/[^\s"'<>，,；;）\]\}]+/i);
+  return match ? match[0].replace(/[).，,；;]+$/g, "") : "";
 }
 
 function uniqueList(values) {
@@ -1699,6 +1787,7 @@ async function formatLibrary(p, opts = {}) {
     normalized_dates: normalized.normalized_dates,
     normalized_selection_values: normalized.normalized_selection_values,
     moved_skill_sources: normalized.moved_skill_sources,
+    recent_links_backfilled: normalized.recent_links_backfilled,
     score_backfilled: normalized.score_backfilled
   };
 }
@@ -1715,6 +1804,7 @@ function repairLibrary(p) {
   let normalizedSelectionValues = 0;
   let movedSkillSources = 0;
   let cleanedLinkRows = 0;
+  let recentLinksBackfilled = 0;
   let scoreBackfilled = 0;
   let scoreNormalized = 0;
   for (const row of rows) {
@@ -1725,6 +1815,9 @@ function repairLibrary(p) {
     row["关联热点链接/帖子"] = cleaned.links;
     movedSkillSources += cleaned.moved_skill_sources;
     if (row["关联热点链接/帖子"] !== beforeLinks) cleanedLinkRows += 1;
+    const beforeRecentLinks = row["关联热点链接/帖子"];
+    row["关联热点链接/帖子"] = ensureLibraryRowRecentLinks(row);
+    if (row["关联热点链接/帖子"] !== beforeRecentLinks) recentLinksBackfilled += 1;
 
     const beforeDate = row["创建时间"];
     row["创建时间"] = dateOnly(row["创建时间"] || isoNow());
@@ -1746,7 +1839,7 @@ function repairLibrary(p) {
       if (row["分数"] !== beforeScore) scoreNormalized += 1;
     }
   }
-  const changed = fieldsChanged || normalizedDates || normalizedSelectionValues || movedSkillSources || cleanedLinkRows || scoreBackfilled || scoreNormalized;
+  const changed = fieldsChanged || normalizedDates || normalizedSelectionValues || movedSkillSources || cleanedLinkRows || recentLinksBackfilled || scoreBackfilled || scoreNormalized;
   if (changed) writeLibrary(p, rows, fields);
   return {
     library_path: p.libraryCsv,
@@ -1756,6 +1849,7 @@ function repairLibrary(p) {
     normalized_selection_values: normalizedSelectionValues,
     moved_skill_sources: movedSkillSources,
     cleaned_link_rows: cleanedLinkRows,
+    recent_links_backfilled: recentLinksBackfilled,
     score_backfilled: scoreBackfilled,
     score_normalized: scoreNormalized,
     fields_updated: fieldsChanged,
@@ -2070,8 +2164,10 @@ function decorateTriageCandidate(p, candidate, decisions = readTriageDecisions(p
   const decision = decisions.find((item) => item.candidate_id === candidate.id) || null;
   const row = findLibraryRowForCandidate(p, candidate);
   const column = matchColumn(p, candidate);
+  const displayLinks = ensureCandidateRecentLinks(candidate);
   return {
     ...candidate,
+    initial_links: displayLinks,
     column: column.column,
     row_number: row ? Number(row["序号"]) || null : null,
     library_selected: row ? isCheckedValue(row["是否选题"]) : false,
@@ -2081,7 +2177,7 @@ function decorateTriageCandidate(p, candidate, decisions = readTriageDecisions(p
     triage_updated_at: decision?.updated_at || null,
     batch_id: decision?.batch_id || null,
     recommended_reason: candidateRecommendedReason(candidate),
-    uncertainty: candidateUncertainty(candidate)
+    uncertainty: candidateUncertainty({ ...candidate, initial_links: displayLinks })
   };
 }
 
@@ -2135,7 +2231,8 @@ function splitLibraryLinks(value) {
   return String(value || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !isSkillPath(line));
+    .map((line) => isSkillPath(line) ? "" : extractExternalTopicUrl(line))
+    .filter(Boolean);
 }
 
 function candidateRecommendedReason(candidate) {
@@ -2701,7 +2798,7 @@ function buildAcceptanceSections(p) {
   });
   const batchWithMultiple = batches.find((batch) => (batch.items || []).length > 1);
   const oneActiveMax = batches.every((batch) => (batch.items || []).filter((item) => item.status === "active").length <= 1);
-  const backfilledRows = rows.filter((row) => String(row["关联热点链接/帖子"] || "").includes("[深研来源]"));
+  const backfilledRows = rows.filter((row) => splitLibraryLinks(row["关联热点链接/帖子"]).length > 0);
   const code = readText(fileURLToPath(import.meta.url));
   const release = releaseCheck(p);
   return [
@@ -2740,7 +2837,7 @@ function buildAcceptanceSections(p) {
       evidence("可以生成 evidence_map.md", projects.some((project) => fs.existsSync(path.join(project.project_dir, "evidence_map.md"))), p.projectsDir, "至少一个项目有 evidence_map.md"),
       evidence("可以生成 knowledge_base.md", Boolean(projectWithFullResearch), projectWithFullResearch ? path.join(projectWithFullResearch.project_dir, "knowledge_base.md") : p.projectsDir, "至少一个项目有完整资料包"),
       evidence("knowledge_base 核心事实可追溯 source_id", Boolean(projectWithTraceableCoreFacts), projectWithTraceableCoreFacts ? path.join(projectWithTraceableCoreFacts.project_dir, "knowledge_base.md") : p.projectsDir, projectWithTraceableCoreFacts ? `${projectWithTraceableCoreFacts.project_id} 核心事实包含 [Sxxx] 引用` : "未找到核心事实可追溯的 knowledge_base"),
-      evidence("可以把链接回填到 CSV", backfilledRows.length > 0, p.libraryCsv, `包含 [深研来源] 的行数：${backfilledRows.length}`)
+      evidence("可以把链接回填到 CSV", backfilledRows.length > 0, p.libraryCsv, `包含可点击链接的行数：${backfilledRows.length}`)
     ]),
     section("反馈学习验收", [
       evidence("可以记录用户反馈", feedback.length > 0, path.join(p.stateDir, "feedback_log.jsonl"), `反馈记录 ${feedback.length} 条`),
@@ -4512,9 +4609,11 @@ function summarizeSentences(text) {
 function backfillProjectLinks(p, projectId) {
   const project = loadProject(p, projectId);
   const sources = saveSources(project, readJson(path.join(project.project_dir, "sources.json"), []));
-  const lines = ["[深研来源]"];
-  sources.filter(isUsableKnowledgeSource).slice(0, 10).forEach((s) => lines.push(`${s.source_id} ${s.title}：${s.url}`));
-  lines.push("", "[本地知识库]", path.join(project.project_dir, "knowledge_base.md"));
+  const lines = sources
+    .filter(isUsableKnowledgeSource)
+    .slice(0, 10)
+    .map((source) => extractExternalTopicUrl(source.url))
+    .filter(Boolean);
   backfillLinksToLibrary(p, Number(project.csv_row_number), lines.join("\n"));
   setProjectStatus(project, "links_backfilled");
   saveProject(p, project);
@@ -5120,16 +5219,7 @@ function normalizeFieldName(field) {
 }
 
 function mergeLinkBlocks(current, addition) {
-  const seen = new Set(String(current || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
-  const lines = String(current || "").split(/\r?\n/).filter((line, index, arr) => line || index < arr.length - 1);
-  if (current.trim() && addition.trim()) lines.push("");
-  for (const line of addition.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed && seen.has(trimmed)) continue;
-    lines.push(line);
-    if (trimmed) seen.add(trimmed);
-  }
-  return lines.join("\n").trim();
+  return uniqueList([...splitLinkItems(current), ...splitLinkItems(addition)].map(extractExternalTopicUrl).filter(Boolean)).join("\n");
 }
 
 function mdTable(headers, rows) {
